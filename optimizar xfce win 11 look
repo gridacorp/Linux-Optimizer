@@ -1,0 +1,143 @@
+#!/bin/bash
+set -e
+
+# --- FUNCIONES AUXILIARES ---
+function safe_xfconf_set() {
+  local channel=$1
+  local property=$2
+  local value=$3
+  if xfconf-query -c "$channel" -p "$property" &>/dev/null; then
+    xfconf-query -c "$channel" -p "$property" -s "$value"
+  else
+    xfconf-query -c "$channel" -n -t string -p "$property" -s "$value"
+  fi
+}
+
+function safe_xfconf_set_bool() {
+  local channel=$1
+  local property=$2
+  local value=$3
+  if xfconf-query -c "$channel" -p "$property" &>/dev/null; then
+    xfconf-query -c "$channel" -p "$property" -s "$value"
+  else
+    xfconf-query -c "$channel" -n -t bool -p "$property" -s "$value"
+  fi
+}
+
+function safe_xfconf_set_int() {
+  local channel=$1
+  local property=$2
+  local value=$3
+  if xfconf-query -c "$channel" -p "$property" &>/dev/null; then
+    xfconf-query -c "$channel" -p "$property" -s "$value"
+  else
+    xfconf-query -c "$channel" -n -t int -p "$property" -s "$value"
+  fi
+}
+
+# --- ACTUALIZACIÓN OPCIONAL ---
+read -rp "¿Querés actualizar repositorios y sistema? (sí/no): " respuesta
+if [[ "$respuesta" =~ ^([sS][iI]|[yY][eE][sS])$ ]]; then
+  echo "Actualizando sistema..."
+  sudo apt update
+  sudo apt upgrade -y
+else
+  echo "Salteando actualización."
+fi
+
+# --- INSTALACIÓN PAQUETES ---
+echo "Instalando paquetes necesarios..."
+sudo apt install -y wget unzip git xfce4-whiskermenu-plugin picom ttf-mscorefonts-installer fonts-crosextra-carlito fonts-crosextra-caladea
+
+# --- DIRECTORIOS ---
+THEME_DIR="$HOME/.themes"
+ICON_DIR="$HOME/.icons"
+mkdir -p "$THEME_DIR" "$ICON_DIR"
+
+# --- DESCARGAS SOLO SI NO EXISTEN ---
+if [ ! -d "$THEME_DIR/Windows-11" ]; then
+  echo "Descargando tema Windows 11..."
+  wget -qO /tmp/windows11-gtk.zip https://github.com/vinceliuice/Windows-11-gtk-theme/releases/latest/download/Windows-11.zip
+  unzip -q /tmp/windows11-gtk.zip -d "$THEME_DIR"
+  rm /tmp/windows11-gtk.zip
+else
+  echo "Tema Windows 11 ya descargado."
+fi
+
+if [ ! -d "$ICON_DIR/Fluent" ]; then
+  echo "Descargando iconos Fluent Windows 11..."
+  wget -qO /tmp/fluent-icons.zip https://github.com/vinceliuice/Fluent-icon-theme/releases/latest/download/Fluent-icon-theme.zip
+  unzip -q /tmp/fluent-icons.zip -d "$ICON_DIR"
+  rm /tmp/fluent-icons.zip
+else
+  echo "Iconos Fluent ya descargados."
+fi
+
+if [ ! -d "$ICON_DIR/Windows-11-cursors" ]; then
+  echo "Descargando cursores Windows 11..."
+  wget -qO /tmp/windows11-cursor.tar.gz https://github.com/vinceliuice/Windows-11-cursors/releases/latest/download/Windows-11-cursors.tar.gz
+  tar -xzf /tmp/windows11-cursor.tar.gz -C "$ICON_DIR"
+  rm /tmp/windows11-cursor.tar.gz
+else
+  echo "Cursores Windows 11 ya descargados."
+fi
+
+# --- APLICAR CONFIGURACIONES XFCE ---
+echo "Aplicando tema, iconos, cursores y fuente..."
+
+safe_xfconf_set xsettings /Net/ThemeName "Windows-11"
+safe_xfconf_set xsettings /Net/IconThemeName "Fluent"
+safe_xfconf_set xsettings /Gtk/CursorThemeName "Windows-11-cursors"
+safe_xfconf_set xsettings /Gtk/FontName "Segoe UI 9"
+
+echo "Configurando panel XFCE..."
+safe_xfconf_set xsettings /Net/IconThemeName "Fluent"
+safe_xfconf_set xfce4-panel /panels/panel-1/position "bottom"
+safe_xfconf_set_int xfce4-panel /panels/panel-1/length 50
+safe_xfconf_set_bool xfce4-panel /panels/panel-1/autohide false
+safe_xfconf_set_bool xfce4-panel /panels/panel-1/position-locked true
+
+# Evitar duplicar whisker menu
+if ! xfconf-query -c xfce4-panel -lv | grep -q whiskermenu; then
+  xfce4-panel --add=whiskermenu
+else
+  echo "Whisker Menu ya agregado."
+fi
+
+# --- CONFIGURACIÓN PICOM OPTIMIZADA PARA BAJO CONSUMO ---
+mkdir -p ~/.config
+
+if [ ! -f ~/.config/picom.conf ]; then
+  echo "Configurando picom para bajo consumo..."
+  cat > ~/.config/picom.conf <<EOL
+backend = "xrender";
+vsync = true;
+shadow = false;
+fading = false;
+EOL
+else
+  echo "Archivo picom.conf ya existe, conservando configuración."
+fi
+
+mkdir -p ~/.config/autostart
+
+if [ ! -f ~/.config/autostart/picom.desktop ]; then
+  cat > ~/.config/autostart/picom.desktop <<EOL
+[Desktop Entry]
+Type=Application
+Exec=picom --config ~/.config/picom.conf
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Picom compositor
+Comment=Compositor optimizado para bajo consumo
+EOL
+else
+  echo "picom.desktop ya existe en autostart."
+fi
+
+echo "Wine no se instaló para evitar procesos innecesarios en segundo plano."
+
+echo "Recordatorio: descargá y aplicá manualmente un fondo de pantalla similar a Windows 11."
+
+echo "¡Listo! Reiniciá tu sesión XFCE para aplicar los cambios."
