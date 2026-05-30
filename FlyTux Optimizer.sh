@@ -101,7 +101,7 @@ done
 echo "✅ Repositorios corregidos."
 
 # ──────────────────────────────────────────────────────────────
-# 3. ACTUALIZACIÓN DE ÍNDICES (RESILIENTE)
+# 3. ACTUALIZACIÓN DE ÍNDICES (RESILIENTE - NO FALLA POR WARNINGS)
 # ──────────────────────────────────────────────────────────────
 echo ""
 echo "🔄 [3/18] Actualizando índices de paquetes (modo resiliente)..."
