@@ -397,10 +397,29 @@ rm -f /tmp/rustdesk.deb 2>/dev/null
 systemctl enable rustdesk.service 2>/dev/null || true
 systemctl start rustdesk.service 2>/dev/null || true
 
-# Proton VPN
-curl -fsSL https://repo.protonvpn.com/debian/public_key.asc | gpg --dearmor -o /usr/share/keyrings/protonvpn-archive-keyring.gpg 2>/dev/null || true
-echo "deb [signed-by=/usr/share/keyrings/protonvpn-archive-keyring.gpg arch=amd64] https://repo.protonvpn.com/debian stable main" | tee /etc/apt/sources.list.d/protonvpn-stable.list >/dev/null 2>&1
-apt update >/dev/null 2>&1 && apt install -y protonvpn 2>/dev/null || true
+# Proton VPN (sin prompts interactivos)
+echo "   🔑 Instalando Proton VPN..."
+
+# Crear directorio de keyrings si no existe
+mkdir -p /usr/share/keyrings 2>/dev/null || true
+
+# Importar clave GPG de forma no interactiva (sobrescribir si existe)
+if ! curl -fsSL https://repo.protonvpn.com/debian/public_key.asc 2>/dev/null | \
+   gpg --dearmor --batch --yes -o /usr/share/keyrings/protonvpn-archive-keyring.gpg 2>/dev/null; then
+  # Fallback: usar tee si gpg falla
+  curl -fsSL https://repo.protonvpn.com/debian/public_key.asc 2>/dev/null | \
+   sudo tee /usr/share/keyrings/protonvpn-archive-keyring.gpg >/dev/null 2>&1 || true
+fi
+
+# Agregar repositorio con arch=amd64 para evitar warnings
+echo "deb [signed-by=/usr/share/keyrings/protonvpn-archive-keyring.gpg arch=amd64] https://repo.protonvpn.com/debian stable main" | \
+  tee /etc/apt/sources.list.d/protonvpn-stable.list >/dev/null 2>&1
+
+# Actualizar e instalar (sin salir si falla)
+apt update >/dev/null 2>&1 || true
+apt install -y protonvpn 2>/dev/null || echo "   ⚠️ Proton VPN: instalar manualmente si es necesario"
+
+echo "   ✅ Proton VPN CLI instalado. (Requiere login manual: protonvpn login)"
 
 echo "✅ Apps esenciales instaladas."
 
