@@ -346,12 +346,15 @@ echo "✅ Firewall: navegación garantizada, puertos críticos cerrados."
 # 15. PRIVACIDAD, DNS Y APPARMOR (SEGURO PARA FLATPAK)
 # ──────────────────────────────────────────────────────────────
 echo ""
-echo "🔒 [15/18] Privacidad, DNS y AppArmor..."
+echo "🔒 [15/18] Privacidad, DNS y AppArmor seguro..."
+
+# Telemetría
 for pkg in popularity-contest whoopsie apport ubuntu-report command-not-found fwupd-refresh gnome-software packagekit-tools; do
   dpkg -l "$pkg" &>/dev/null && apt purge -y "$pkg" >/dev/null 2>&1 || true
 done
 sed -i 's/^Enabled=1/Enabled=0/' /etc/default/apport 2>/dev/null || true
 
+# DNS seguro
 mkdir -p /etc/systemd/resolved.conf.d
 cat > /etc/systemd/resolved.conf.d/flytux-dns.conf <<EOF
 [Resolve]
@@ -362,21 +365,17 @@ DNSOverTLS=opportunistic
 EOF
 systemctl restart systemd-resolved 2>/dev/null || true
 
+# AppArmor: habilitar servicio SIN forzar perfiles que rompen Flatpak
 systemctl enable apparmor 2>/dev/null || true
+
+# Desactivar AppArmor SOLO para perfiles Flatpak/bwrap (evita conflictos de sandbox)
+# Corrección: no usar 2>/dev/null en la declaración del for
 for profile in /etc/apparmor.d/flatpak-* /etc/apparmor.d/*bwrap*; do
-  [ -f "$profile" ] && aa-disable "$profile" 2>/dev/null || true
+  [ -f "$profile" ] || continue  # ← Filtra archivos que no existen
+  aa-disable "$profile" 2>/dev/null || true
 done
 
-if [ -n "$ACTIVE_USER" ] && [ "$ACTIVE_USER" != "root" ]; then
-  UID_USER=$(id -u "$ACTIVE_USER")
-  DBUS="unix:path=/run/user/$UID_USER/bus"
-  case "$DE" in
-    *gnome*|*zorin*) runuser -u "$ACTIVE_USER" -- env DBUS_SESSION_BUS_ADDRESS="$DBUS" bash -c 'gsettings set org.gnome.desktop.interface enable-animations false 2>/dev/null || true' ;;
-    *kde*|*plasma*) runuser -u "$ACTIVE_USER" -- bash -c 'kwriteconfig5 --file kwinrc --group Compositing --key Enabled false 2>/dev/null || true' ;;
-    *xfce*) runuser -u "$ACTIVE_USER" -- bash -c 'xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || true' ;;
-  esac
-fi
-echo "✅ AppArmor habilitado (Flatpak excluido). Privacidad aplicada."
+echo "✅ AppArmor habilitado (Flatpak excluido para evitar conflictos)."
 
 # ──────────────────────────────────────────────────────────────
 # 16. INTEGRACIÓN CPU EN GRUB
