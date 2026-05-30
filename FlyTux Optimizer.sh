@@ -114,33 +114,37 @@ fi
 # ──────────────────────────────────────────────────────────────
 echo "🔧 [2b/18] Corrigiendo repositorios para evitar warnings de arquitectura..."
 
+# Función segura para iterar sobre patrones de archivos
+fix_repo_arch() {
+  local PATTERN="$1"
+  local ARCH_DIRECTIVE="$2"
+  
+  for FILE in $PATTERN; do
+    [ -f "$FILE" ] || continue
+    
+    if [[ "$FILE" == *.sources ]]; then
+      # Formato DEB822 (Ubuntu moderno)
+      if ! grep -q "^Architectures:" "$FILE" 2>/dev/null; then
+        echo "Architectures: amd64" >> "$FILE"
+      fi
+    else
+      # Formato clásico deb http://...
+      sed -i -E "s/^deb (https?:\/\/[^ ]+)/deb [arch=amd64] \1/" "$FILE" 2>/dev/null || true
+    fi
+  done
+}
+
 # Brave: forzar arch=amd64
-for FILE in /etc/apt/sources.list.d/*brave*.list /etc/apt/sources.list.d/brave*.sources 2>/dev/null; do
-  [ -f "$FILE" ] || continue
-  if [[ "$FILE" == *.sources ]]; then
-    grep -q "Architectures:" "$FILE" 2>/dev/null || echo "Architectures: amd64" >> "$FILE"
-  else
-    sed -i -E 's/^deb (https?:\/\/[^ ]+)/deb [arch=amd64] \1/' "$FILE" 2>/dev/null || true
-  fi
-done
+fix_repo_arch "/etc/apt/sources.list.d/*brave*.list /etc/apt/sources.list.d/brave*.sources" "amd64"
 
 # Google Chrome: forzar arch=amd64
-for FILE in /etc/apt/sources.list.d/*chrome*.list /etc/apt/sources.list.d/google*.sources 2>/dev/null; do
-  [ -f "$FILE" ] || continue
-  if [[ "$FILE" == *.sources ]]; then
-    sed -i '/^Architectures:/d' "$FILE" 2>/dev/null || true
-    echo "Architectures: amd64" >> "$FILE"
-  else
-    sed -i -E 's/^deb (https?:\/\/dl\.google\.com[^ ]+)/deb [arch=amd64] \1/' "$FILE" 2>/dev/null || true
-  fi
-done
+fix_repo_arch "/etc/apt/sources.list.d/*chrome*.list /etc/apt/sources.list.d/google*.sources" "amd64"
 
 # PPAs: eliminar componente 'contrib' si no existe
-for FILE in /etc/apt/sources.list.d/*ulauncher*.list /etc/apt/sources.list.d/*docky*.list 2>/dev/null; do
+for FILE in /etc/apt/sources.list.d/*ulauncher*.list /etc/apt/sources.list.d/*docky*.list; do
   [ -f "$FILE" ] || continue
   sed -i 's/ contrib//g' "$FILE" 2>/dev/null || true
 done
-
 echo "✅ Repositorios corregidos para salida limpia de apt."
 
 # Actualizar índices
