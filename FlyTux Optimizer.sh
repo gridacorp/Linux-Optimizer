@@ -117,43 +117,57 @@ echo "🔧 [2b/18] Corrigiendo repositorios para evitar warnings de arquitectura
 # Función segura para iterar sobre patrones de archivos
 fix_repo_arch() {
   local PATTERN="$1"
-  local ARCH_DIRECTIVE="$2"
   
   for FILE in $PATTERN; do
     [ -f "$FILE" ] || continue
     
     if [[ "$FILE" == *.sources ]]; then
-      # Formato DEB822 (Ubuntu moderno)
+      # Formato DEB822 (Ubuntu moderno): agregar Architectures si no existe
       if ! grep -q "^Architectures:" "$FILE" 2>/dev/null; then
         echo "Architectures: amd64" >> "$FILE"
       fi
     else
-      # Formato clásico deb http://...
-      sed -i -E "s/^deb (https?:\/\/[^ ]+)/deb [arch=amd64] \1/" "$FILE" 2>/dev/null || true
+      # Formato clásico deb http://...: inyectar [arch=amd64]
+      sed -i -E 's/^deb (https?:\/\/[^ ]+)/deb [arch=amd64] \1/' "$FILE" 2>/dev/null || true
     fi
   done
 }
 
 # Brave: forzar arch=amd64
-fix_repo_arch "/etc/apt/sources.list.d/*brave*.list /etc/apt/sources.list.d/brave*.sources" "amd64"
+fix_repo_arch "/etc/apt/sources.list.d/*brave*.list /etc/apt/sources.list.d/brave*.sources"
 
 # Google Chrome: forzar arch=amd64
-fix_repo_arch "/etc/apt/sources.list.d/*chrome*.list /etc/apt/sources.list.d/google*.sources" "amd64"
+fix_repo_arch "/etc/apt/sources.list.d/*chrome*.list /etc/apt/sources.list.d/google*.sources"
 
 # PPAs: eliminar componente 'contrib' si no existe
 for FILE in /etc/apt/sources.list.d/*ulauncher*.list /etc/apt/sources.list.d/*docky*.list; do
   [ -f "$FILE" ] || continue
   sed -i 's/ contrib//g' "$FILE" 2>/dev/null || true
 done
+
 echo "✅ Repositorios corregidos para salida limpia de apt."
 
-# Actualizar índices
-echo "🔄 [3/18] Actualizando índices de paquetes..."
-apt update -o Acquire::Retries=3 >/dev/null 2>&1 || {
-  echo "⚠️ Error al actualizar índices. Verifica conexión a internet."
-  exit 1
-}
-echo "✅ Índices actualizados."
+# ──────────────────────────────────────────────────────────────
+# 3. ACTUALIZACIÓN DE ÍNDICES (RESILIENTE - NO FALLA POR WARNINGS)
+# ──────────────────────────────────────────────────────────────
+echo ""
+echo "🔄 [3/18] Actualizando índices de paquetes (modo resiliente)..."
+
+# Capturar salida de apt update para análisis
+APT_OUTPUT=$(apt update -o Acquire::Retries=3 --allow-releaseinfo-change 2>&1)
+APT_EXIT=$?
+
+# Verificar si hay errores CRÍTICOS (líneas que empiezan con "E:")
+if echo "$APT_OUTPUT" | grep -q "^E:"; then
+  echo "❌ Error crítico en apt update:"
+  echo "$APT_OUTPUT" | grep "^E:" | head -n 3
+  echo "⚠️ El script continuará, pero algunas instalaciones podrían fallar."
+  echo "💡 Solución manual: revisa /etc/apt/sources.list.d/ y elimina repositorios rotos."
+else
+  # Solo hay warnings (N:/W:) o éxito total → continuar
+  echo "✅ Índices actualizados."
+  [ $APT_EXIT -ne 0 ] && echo "ℹ️ Nota: apt devolvió código $APT_EXIT, pero sin errores críticos."
+fi
 
 # ──────────────────────────────────────────────────────────────
 # 4. DETECCIÓN DE HARDWARE Y ENTORNO GRÁFICO
